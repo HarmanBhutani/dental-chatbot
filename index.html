@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BrightSmile Dental – Assistant</title>
+<style>
+  :root{--teal:#0e9aa7;--teal-d:#0a7480;--bg:#eef6f7;--bot:#fff;--ink:#1d2b2e;--mute:#6b7f83}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:var(--ink)}
+  .chat{width:100%;max-width:420px;height:min(680px,100vh);background:#fff;border-radius:18px;box-shadow:0 12px 40px rgba(14,90,100,.18);display:flex;flex-direction:column;overflow:hidden}
+  header{background:linear-gradient(135deg,var(--teal),var(--teal-d));color:#fff;padding:14px 18px;display:flex;align-items:center;gap:12px}
+  .av{width:40px;height:40px;border-radius:50%;background:#fff3;display:grid;place-items:center;font-size:22px}
+  header b{display:block;font-size:16px}
+  header small{opacity:.85;font-size:12px}
+  #log{flex:1;overflow-y:auto;padding:16px;background:var(--bg);display:flex;flex-direction:column;gap:10px}
+  .m{max-width:82%;padding:10px 14px;border-radius:16px;font-size:14.5px;line-height:1.45;white-space:pre-line;animation:in .2s ease}
+  .bot{background:var(--bot);align-self:flex-start;border-bottom-left-radius:4px;box-shadow:0 1px 2px #0001}
+  .user{background:var(--teal);color:#fff;align-self:flex-end;border-bottom-right-radius:4px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;align-self:flex-start;max-width:92%}
+  .chip{border:1px solid var(--teal);color:var(--teal-d);background:#fff;border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer}
+  .chip:hover{background:var(--teal);color:#fff}
+  .typing{display:flex;gap:4px;padding:12px 14px}
+  .typing i{width:7px;height:7px;border-radius:50%;background:var(--mute);animation:b 1s infinite}
+  .typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
+  form{display:flex;gap:8px;padding:12px;border-top:1px solid #e3eef0;background:#fff}
+  input{flex:1;border:1px solid #cfe0e3;border-radius:999px;padding:10px 16px;font-size:14.5px;outline:none}
+  input:focus{border-color:var(--teal)}
+  button.send{border:0;background:var(--teal);color:#fff;border-radius:999px;padding:0 18px;font-size:14px;cursor:pointer}
+  .foot{text-align:center;font-size:11px;color:var(--mute);padding:0 0 8px;background:#fff}
+  @keyframes in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  @keyframes b{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-5px)}}
+</style>
+</head>
+<body>
+<div class="chat">
+  <header><div class="av">🦷</div><div><b>BrightSmile Dental</b><small>● Virtual assistant · replies instantly</small></div></header>
+  <div id="log"></div>
+  <form id="f"><input id="in" placeholder="Type a message…" autocomplete="off"><button class="send">Send</button></form>
+</div>
+
+<script>
+// ---------- Clinic data (edit these for each client) ----------
+const CLINIC = {
+  name: "BrightSmile Dental",
+  phone: "(555) 123-4567",
+  address: "42 Maple Street, Springfield",
+  hours: "Mon–Fri: 9am–6pm\nSat: 9am–2pm\nSun: Closed",
+  services: ["Check-up & Cleaning","Teeth Whitening","Fillings","Root Canal","Braces & Aligners","Dental Implants","Kids Dentistry"]
+};
+const PRICES = {
+  "check-up":"Check-up & cleaning: $80–$120",
+  "whitening":"Teeth whitening: $250–$400",
+  "filling":"Fillings: $90–$250 per tooth",
+  "root canal":"Root canal: $600–$1,100",
+  "braces":"Braces: $2,500–$5,500 · Clear aligners: $3,000–$6,000",
+  "implant":"Dental implant: $1,800–$3,000 per tooth"
+};
+
+// ---------- Intents: keywords → reply ----------
+const MENU = ["Book appointment","Services","Prices","Opening hours","Location","Emergency"];
+const INTENTS = [
+  {id:"greet", kw:["hi","hello","hey","good morning","good evening"], reply:()=>`Hi! 👋 I'm the ${CLINIC.name} assistant. How can I help you today?`, chips:MENU},
+  {id:"book", kw:["book","appointment","schedule","reserve","visit","see a dentist"], action:startBooking},
+  {id:"cancel", kw:["cancel","reschedule","change my appointment","postpone"], reply:()=>`To cancel or reschedule, please call us at ${CLINIC.phone} at least 24 hours before your visit, and we'll sort it out right away.`, chips:["Book appointment","Opening hours"]},
+  {id:"emergency", kw:["emergency","severe","bleeding","swollen","swelling","knocked out","broken tooth","urgent","unbearable"], reply:()=>`🚨 Dental emergency?\n\n• Call us now: ${CLINIC.phone} — we keep same-day emergency slots.\n• Knocked-out tooth: keep it in milk and come in within 30 minutes.\n• Swelling with fever or trouble breathing: go to the nearest ER.`, chips:["Location","Opening hours"]},
+  {id:"pain", kw:["pain","toothache","tooth ache","hurts","sensitive","sensitivity","ache"], reply:()=>`Sorry you're in pain 😟. Rinse with warm salt water and avoid very hot/cold food until you're seen. Persistent pain should be checked soon — want me to book you in?`, chips:["Book appointment","Emergency"]},
+  {id:"price", kw:["price","cost","how much","fee","fees","charge","rate","rates"], reply:()=>"Here are our typical price ranges:\n\n• "+Object.values(PRICES).join("\n• ")+"\n\nExact quotes are given after your exam.", chips:["Insurance","Book appointment"]},
+  {id:"insurance", kw:["insurance","cover","coverage","delta","cigna","metlife","payment","pay","emi","installment"], reply:()=>"We accept most major dental insurance plans and offer 0% monthly payment plans for treatments over $300. Bring your insurance card and we'll verify coverage before treatment.", chips:["Prices","Book appointment"]},
+  {id:"hours", kw:["hours","open","opening","timing","timings","close","closing","when are you"], reply:()=>`🕘 Our hours:\n${CLINIC.hours}`, chips:["Book appointment","Location"]},
+  {id:"location", kw:["where","location","address","directions","map","parking","find you"], reply:()=>`📍 ${CLINIC.address}\nFree parking is available behind the building.\n📞 ${CLINIC.phone}`, chips:["Opening hours","Book appointment"]},
+  {id:"services", kw:["service","services","treatment","treatments","offer","do you do","what do you"], reply:()=>"We offer:\n\n• "+CLINIC.services.join("\n• ")+"\n\nAsk me about any of them!", chips:["Whitening","Braces","Root canal","Implants"]},
+  {id:"whitening", kw:["whiten","whitening","bleach","yellow","stain"], reply:()=>"Professional whitening takes about 60 minutes and can brighten teeth by up to 8 shades. "+PRICES.whitening+".", chips:["Book appointment","Prices"]},
+  {id:"braces", kw:["braces","aligner","aligners","invisalign","crooked","straighten"], reply:()=>"We offer metal braces and clear aligners. Treatment usually takes 12–24 months. "+PRICES.braces+". A free consultation is included for new patients.", chips:["Book appointment","Prices"]},
+  {id:"root", kw:["root canal","rootcanal","infection","abscess"], reply:()=>"Modern root canals are comfortable and done under local anesthesia, usually in 1–2 visits. "+PRICES["root canal"]+".", chips:["Book appointment","Emergency"]},
+  {id:"implant", kw:["implant","implants","missing tooth","denture","dentures","crown","bridge"], reply:()=>"Implants replace missing teeth permanently and look/feel natural. "+PRICES.implant+". The process takes 3–6 months in total.", chips:["Book appointment","Insurance"]},
+  {id:"kids", kw:["kid","kids","child","children","baby","pediatric","son","daughter"], reply:()=>"We love little patients! 🧒 Kids can start visits from age 1. Our check-ups are gentle, fun and include a free toothbrush.", chips:["Book appointment","Prices"]},
+  {id:"cleaning", kw:["clean","cleaning","checkup","check-up","scaling","polish","exam"], reply:()=>"We recommend a check-up & cleaning every 6 months. "+PRICES["check-up"]+" (X-rays extra if needed).", chips:["Book appointment","Insurance"]},
+  {id:"filling", kw:["filling","cavity","cavities","decay","hole"], reply:()=>"Cavities are treated with tooth-coloured fillings, usually in a single visit. "+PRICES.filling+".", chips:["Book appointment","Prices"]},
+  {id:"human", kw:["human","person","staff","receptionist","call","phone","talk to","contact","speak"], reply:()=>`You can reach our front desk at ${CLINIC.phone} during opening hours.`, chips:["Opening hours","Book appointment"]},
+  {id:"thanks", kw:["thanks","thank you","thx","great","awesome","perfect"], reply:()=>"You're welcome! 😊 Anything else I can help with?", chips:MENU},
+  {id:"bye", kw:["bye","goodbye","see you","that's all","no thanks"], reply:()=>"Take care and keep smiling! 😁 Goodbye!", chips:[]}
+];
+// chip labels that map to intents
+const CHIP_MAP = {"Services":"services","Prices":"price","Opening hours":"hours","Location":"location","Emergency":"emergency","Insurance":"insurance","Whitening":"whitening","Braces":"braces","Root canal":"root","Implants":"implant","Book appointment":"book"};
+
+// ---------- Booking flow (state machine) ----------
+let flow = null;
+const booking = {};
+function startBooking(){
+  flow = "name"; Object.keys(booking).forEach(k=>delete booking[k]);
+  say("Happy to help you book! 📅 First, what's your full name?");
+}
+function handleFlow(text){
+  const t = text.trim();
+  if(/^(cancel|stop|exit|quit)$/i.test(t)){ flow=null; return say("No problem, booking cancelled.", MENU), true; }
+  if(flow==="name"){
+    if(t.length<2) return say("Could you share your name please?"), true;
+    booking.name = t.replace(/^(my name is|i am|i'm)\s+/i,""); flow="service";
+    say(`Nice to meet you, ${booking.name.split(" ")[0]}! What do you need?`, CLINIC.services); return true;
+  }
+  if(flow==="service"){
+    const hit = CLINIC.services.find(s=>s.toLowerCase()===t.toLowerCase()) || CLINIC.services.find(s=>s.toLowerCase().split(/[ &]+/).some(w=>w.length>3&&t.toLowerCase().includes(w)));
+    booking.service = hit || t; flow="day";
+    say("Which day works for you?", ["Today","Tomorrow","This Saturday","Next Monday"]); return true;
+  }
+  if(flow==="day"){
+    booking.day = t; flow="time";
+    say("And what time?", ["10:00 AM","12:00 PM","3:00 PM","5:00 PM"]); return true;
+  }
+  if(flow==="time"){
+    booking.time = t; flow="phone";
+    say("Last step — your phone number so we can confirm?"); return true;
+  }
+  if(flow==="phone"){
+    if(t.replace(/\D/g,"").length<7) return say("That doesn't look like a valid number. Could you re-enter it?"), true;
+    booking.phone = t; flow="confirm";
+    say(`Please confirm your booking:\n\n👤 ${booking.name}\n🦷 ${booking.service}\n📅 ${booking.day}, ${booking.time}\n📞 ${booking.phone}`, ["Yes, confirm","No, start over"]); return true;
+  }
+  if(flow==="confirm"){
+    if(/^(y|yes|confirm|ok|sure)/i.test(t)){
+      const ref = "BS-"+Math.floor(1000+Math.random()*9000); flow=null;
+      say(`✅ You're booked! Reference: ${ref}\nWe'll text a reminder to ${booking.phone}. See you at ${CLINIC.address}!`, ["Opening hours","Location"]);
+    } else { startBooking(); }
+    return true;
+  }
+  return false;
+}
+
+// ---------- Matching ----------
+function match(text){
+  const t = " "+text.toLowerCase().replace(/[^a-z0-9' -]/g," ")+" ";
+  let best=null, score=0;
+  for(const it of INTENTS){
+    let s=0;
+    for(const k of it.kw){ if(t.includes(" "+k+" ") || (k.length>4 && t.includes(k))) s += k.split(" ").length+1; }
+    if(s>score){score=s;best=it;}
+  }
+  return best;
+}
+
+// ---------- UI ----------
+const log = document.getElementById("log"), input = document.getElementById("in");
+function add(cls,text){ const d=document.createElement("div"); d.className="m "+cls; d.textContent=text; log.appendChild(d); log.scrollTop=log.scrollHeight; return d; }
+function chips(list){
+  document.querySelectorAll(".chips").forEach(c=>c.remove());
+  if(!list||!list.length) return;
+  const w=document.createElement("div"); w.className="chips";
+  list.forEach(l=>{const b=document.createElement("button");b.className="chip";b.textContent=l;b.onclick=()=>send(l);w.appendChild(b)});
+  log.appendChild(w); log.scrollTop=log.scrollHeight;
+}
+function say(text,list){
+  const t=document.createElement("div"); t.className="m bot typing"; t.innerHTML="<i></i><i></i><i></i>"; log.appendChild(t); log.scrollTop=log.scrollHeight;
+  setTimeout(()=>{ t.remove(); add("bot",text); chips(list); }, 450+Math.min(text.length*4,600));
+}
+function send(text){
+  text=text.trim(); if(!text) return;
+  add("user",text); document.querySelectorAll(".chips").forEach(c=>c.remove());
+  if(flow && handleFlow(text)) return;
+  const it = CHIP_MAP[text] ? INTENTS.find(i=>i.id===CHIP_MAP[text]) : match(text);
+  if(!it) return say(`Sorry, I didn't quite get that. I can help with appointments, services, prices, hours and location. For anything else, call ${CLINIC.phone}.`, MENU);
+  it.action ? it.action() : say(it.reply(), it.chips);
+}
+document.getElementById("f").onsubmit=e=>{e.preventDefault();const v=input.value;input.value="";send(v)};
+say(`Hello! 👋 Welcome to ${CLINIC.name}. I can help with appointments, services, prices and more.`, MENU);
+</script>
+</body>
+</html>
